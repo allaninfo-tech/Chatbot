@@ -1,12 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app/api/chat/route.ts": {
-      "runtime": "edge"
-    },
-    "app/api/lead/route.ts": {
-      "runtime": "edge"
-    }
-  },
-  "regions": ["iad1"]
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }

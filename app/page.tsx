@@ -6,7 +6,7 @@ export default function HomePage() {
       <section className="hero-simple">
         <p className="hero-kicker">Odd Shoes</p>
         <h1>
-          Custom Marketing AI Assistant for Christian founders.
+          Custom Marketing AI Assistant <span>for Christian founders.</span>
         </h1>
       </section>
 

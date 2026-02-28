@@ -1,4 +1,5 @@
-import { BRAND_SYSTEM_PROMPT, fallbackGuidance } from "@/lib/brand";
+import { BRAND_SYSTEM_PROMPT } from "@/lib/brand";
+import { localMarketingResponse } from "@/lib/localMarketingResponder";
 import type { ChatMessage, MarketingMode, ProspectProfile } from "@/lib/types";
 
 export const runtime = "edge";
@@ -146,6 +147,25 @@ function extractGeminiText(payload: unknown): string | null {
     .trim();
 }
 
+function fallbackPayload(args: {
+  messages: ChatMessage[];
+  profile: ProspectProfile;
+  mode: MarketingMode;
+  notice: string;
+  issue: string;
+}): { message: string; source: "fallback"; notice: string; issue: string } {
+  return {
+    message: localMarketingResponse({
+      messages: args.messages,
+      profile: args.profile,
+      mode: args.mode
+    }),
+    source: "fallback",
+    notice: args.notice,
+    issue: args.issue
+  };
+}
+
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = (await request.json()) as {
@@ -164,10 +184,14 @@ export async function POST(request: Request): Promise<Response> {
 
     if (!apiKey) {
       return Response.json(
-        {
-          message:
-            "Gemini API is not configured yet. Add GEMINI_API_KEY to continue.\n\nYou can still explore services here: https://www.oddshoes.dev/services"
-        },
+        fallbackPayload({
+          messages,
+          profile,
+          mode,
+          notice:
+            "Gemini API key is missing. Using built-in marketing assistant responses until GEMINI_API_KEY is configured.",
+          issue: "missing_api_key"
+        }),
         { status: 200 }
       );
     }
@@ -210,22 +234,39 @@ export async function POST(request: Request): Promise<Response> {
 
     if (!result.ok) {
       const errorText = await result.text();
+      const lower = errorText.toLowerCase();
+      const isQuota = result.status === 429 || lower.includes("quota") || lower.includes("resource_exhausted");
+
       return Response.json(
-        {
-          message: fallbackGuidance(),
-          error: `Gemini request failed (${result.status}): ${errorText.slice(0, 180)}`
-        },
+        fallbackPayload({
+          messages,
+          profile,
+          mode,
+          notice: isQuota
+            ? "Gemini quota is currently exhausted. Switched to built-in concierge mode so chat still works."
+            : "Gemini is temporarily unavailable. Switched to built-in concierge mode.",
+          issue: isQuota ? "quota_exceeded" : `gemini_http_${result.status}`
+        }),
         { status: 200 }
       );
     }
 
     const payload = await result.json();
     const text = extractGeminiText(payload);
-    const output = text && text.length > 0 ? text : fallbackGuidance();
+    const output = text && text.length > 0 ? text : localMarketingResponse({ messages, profile, mode });
 
     setCachedResponse(key, output);
-    return Response.json({ message: output }, { status: 200 });
+    return Response.json({ message: output, source: "gemini", model: MODEL }, { status: 200 });
   } catch {
-    return Response.json({ message: fallbackGuidance() }, { status: 200 });
+    return Response.json(
+      fallbackPayload({
+        messages: [],
+        profile: { stage: "", timeline: "", goal: "" },
+        mode: "fit-check",
+        notice: "Unexpected server error. Switched to built-in concierge mode.",
+        issue: "server_error"
+      }),
+      { status: 200 }
+    );
   }
 }

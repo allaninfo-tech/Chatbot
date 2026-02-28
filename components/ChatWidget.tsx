@@ -110,6 +110,8 @@ export default function ChatWidget() {
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [engine, setEngine] = useState<"gemini" | "fallback">("gemini");
+  const [engineNotice, setEngineNotice] = useState("");
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -150,6 +152,7 @@ export default function ChatWidget() {
     }
 
     setError("");
+    setEngineNotice("");
     setDraft("");
 
     const nextProfile = mergeProfileFromText(profile, userInput);
@@ -170,12 +173,21 @@ export default function ChatWidget() {
         })
       });
 
-      const data = (await response.json()) as { message?: string };
+      const data = (await response.json()) as {
+        message?: string;
+        source?: "gemini" | "fallback";
+        notice?: string;
+      };
       const assistantReply = data.message?.trim();
 
       if (!assistantReply) {
         setError("No response received. Please try again.");
         return;
+      }
+
+      setEngine(data.source === "fallback" ? "fallback" : "gemini");
+      if (data.notice) {
+        setEngineNotice(data.notice);
       }
 
       setMessages((prev) => [
@@ -202,6 +214,8 @@ export default function ChatWidget() {
     setProfile(EMPTY_PROFILE);
     setDraft("");
     setError("");
+    setEngine("gemini");
+    setEngineNotice("");
     window.localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -209,23 +223,33 @@ export default function ChatWidget() {
     <section className="embedded-chat" aria-label="Odd Shoes Marketing Chatbot">
       <header className="embedded-header">
         <div>
-          <p className="status-chip">Live Marketing Chatbot</p>
+          <div className="chip-row">
+            <p className="status-chip">Marketing AI Assistant</p>
+            <p className={`engine-chip ${engine === "gemini" ? "live" : "degraded"}`}>
+              {engine === "gemini" ? "Gemini Live" : "Smart Fallback"}
+            </p>
+          </div>
           <h2>Odd Shoes Growth Concierge</h2>
+          <p className="embedded-subtitle">Faith-centered, conversion-first guidance.</p>
         </div>
         <button className="reset-btn" onClick={resetChat} aria-label="Reset chat">
           Reset
         </button>
       </header>
 
-      <div className="quick-replies" role="list" aria-label="Quick replies">
-        {QUICK_REPLIES.map((label) => (
-          <button key={label} onClick={() => void sendMessage(label)} type="button">
-            {label}
-          </button>
-        ))}
+      <div className="quick-replies-wrap">
+        <p className="reply-label">Starter prompts</p>
+        <div className="quick-replies" role="list" aria-label="Quick replies">
+          {QUICK_REPLIES.map((label) => (
+            <button key={label} onClick={() => void sendMessage(label)} type="button">
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <section ref={scrollRef} className="chat-scroll">
+        {engineNotice ? <p className="engine-notice">{engineNotice}</p> : null}
         {messages.map((message, idx) => (
           <div key={`${message.role}-${idx}`} className={`message ${message.role}`}>
             {message.content}
@@ -252,9 +276,10 @@ export default function ChatWidget() {
             aria-label="Message"
           />
           <button type="submit" disabled={isLoading || draft.trim().length === 0}>
-            Send
+            Send {"->"}
           </button>
         </form>
+        <p className="input-hint">Try: "Which service fits my startup stage?"</p>
         {error ? <p className="error-text">{error}</p> : null}
       </div>
     </section>
